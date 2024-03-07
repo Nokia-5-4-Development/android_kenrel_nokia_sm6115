@@ -114,3 +114,6 @@ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX) += synaptics_dsx/
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/
 obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
 obj-$(CONFIG_TOUCHSCREEN_NT36XXX)	+= nt36xxx/
+obj-$(CONFIG_TOUCHSCREEN_ILI_7807G)	+= ILI_touch/
+obj-$(CONFIG_TOUCHSCREEN_ILI_7806S)	+= ILI_touch_v3/
+obj-$(CONFIG_TOUCHSCREEN_FTS_1838)	+= focaltech_touch_1838/
