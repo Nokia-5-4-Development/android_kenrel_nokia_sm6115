@@ -49,6 +49,10 @@
 
 #include <acpi/ghes.h>
 
+#ifdef CONFIG_RECORD_CRASH_INFO
+#include <linux/huaqin/crash_record.h>
+#endif
+
 struct fault_info {
 	int	(*fn)(unsigned long addr, unsigned int esr,
 		      struct pt_regs *regs);
@@ -276,6 +280,11 @@ static void die_kernel_fault(const char *msg, unsigned long addr,
 
 	pr_alert("Unable to handle kernel %s at virtual address %016lx\n", msg,
 		 addr);
+
+#ifdef CONFIG_RECORD_CRASH_INFO
+    set_crash_info_main_reason(msg);
+    set_crash_info_sub_reason_with_addr((unsigned long)regs->pc);
+#endif
 
 	mem_abort_decode(esr);
 
