@@ -1317,6 +1317,13 @@ endmenu
 
 menu "ARMv8.2 architectural features"
 
+config PRODUCT_DRDOOM
+	bool "Enable Support for DRDOOM product"
+	default n
+	help
+	  This enables support for the product zql1849. If you don't
+	  know what to do here, say N
+
 config ARM64_UAO
 	bool "Enable support for User Access Override (UAO)"
 	default y
