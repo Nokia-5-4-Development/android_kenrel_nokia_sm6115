@@ -232,4 +232,10 @@ source "drivers/sensors/Kconfig"
 source "drivers/gpu/msm/Kconfig"
 
 source "drivers/energy_model/Kconfig"
+
+source "drivers/fps/silead/Kconfig"
+
+source "drivers/fps/focaltech/Kconfig"
+
+source "drivers/fps/cdfinger/Kconfig"
 endmenu

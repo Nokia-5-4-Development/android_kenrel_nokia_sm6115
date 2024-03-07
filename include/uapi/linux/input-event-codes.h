@@ -338,6 +338,10 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEYCODE_SYSTEM_NAVIGATION_UP     745   /* add fingerprint UP press key code */
+#define KEYCODE_SYSTEM_NAVIGATION_DOWN   746   /* add fingerprint DOWN press key code */
+#define KEY_FP_GESTURE_LONG_PRESS        744   /* add fingerprint long press key code */
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
