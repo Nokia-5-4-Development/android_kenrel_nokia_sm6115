@@ -170,6 +170,33 @@ static ssize_t brightness_show(struct device *dev,
 	return sprintf(buf, "%d\n", bd->props.brightness);
 }
 
+static ssize_t boost_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+
+	return sprintf(buf, "%d\n", bd->props.boost_mode);
+}
+
+static ssize_t boost_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int rc;
+	struct backlight_device *bd = to_backlight_device(dev);
+	unsigned long boost_mode;
+
+	rc = kstrtoul(buf, 0, &boost_mode);
+	if (rc)
+		return rc;
+
+	bd->props.boost_mode = boost_mode;
+
+	rc = backlight_device_set_brightness(bd, 255);
+
+	return rc ? rc : count;
+}
+static DEVICE_ATTR_RW(boost_mode);
+
 int backlight_device_set_brightness(struct backlight_device *bd,
 				    unsigned long brightness)
 {
@@ -180,8 +207,16 @@ int backlight_device_set_brightness(struct backlight_device *bd,
 		if (brightness > bd->props.max_brightness)
 			rc = -EINVAL;
 		else {
-			pr_debug("set brightness to %lu\n", brightness);
-			bd->props.brightness = brightness;
+			if ((bd->props.boost_mode == 0) && (NULL != strstr(panel_name, "mdss_dsi_ft8615ab_gx"))) {
+				bd->props.brightness = brightness*214/255;
+				pr_debug("set brightness to %lu\n", bd->props.brightness);
+			} else if ((bd->props.boost_mode == 0) && (NULL == strstr(panel_name, "mdss_dsi_ft8615ab_gx"))) {
+				bd->props.brightness = brightness*200/255;
+				pr_debug("set brightness to %lu\n", bd->props.brightness);
+			} else {
+				bd->props.brightness = brightness;
+				pr_debug("set brightness to %lu\n", brightness);
+			}
 			rc = backlight_update_status(bd);
 		}
 	}
@@ -293,6 +328,7 @@ static void bl_device_release(struct device *dev)
 
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_bl_power.attr,
+	&dev_attr_boost_mode.attr,
 	&dev_attr_brightness.attr,
 	&dev_attr_actual_brightness.attr,
 	&dev_attr_max_brightness.attr,
