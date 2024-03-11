@@ -166,6 +166,7 @@ struct qusb_phy {
 	int			tune2_efuse_bit_pos;
 	int			tune2_efuse_num_of_bits;
 	int			tune2_efuse_correction;
+	int			tune2_efuse_correction_host;
 
 	bool			cable_connected;
 	bool			suspended;
@@ -421,6 +422,7 @@ static void qusb_phy_get_tune2_param(struct qusb_phy *qphy)
 {
 	u32 bit_mask = 1;
 	u8 reg_val;
+	int temp_correction = 0;
 
 	pr_debug("%s(): num_of_bits:%d bit_pos:%d\n", __func__,
 				qphy->tune2_efuse_num_of_bits,
@@ -448,19 +450,27 @@ static void qusb_phy_get_tune2_param(struct qusb_phy *qphy)
 		qphy->tune2_val = TUNE2_HIGH_NIBBLE_VAL(qphy->tune2_val,
 					qphy->tune2_efuse_bit_pos, bit_mask);
 	}
+	if(qphy->phy.flags & PHY_HOST_MODE)
+	{
+		temp_correction = qphy->tune2_efuse_correction_host;
+	}
+	else
+	{
+		temp_correction = qphy->tune2_efuse_correction;
+	}
 
 	pr_debug("%s(): efuse based tune2 value:%d\n",
 				__func__, qphy->tune2_val);
 
 	/* Update higher nibble of TUNE2 value for better rise/fall times */
-	if (qphy->tune2_efuse_correction && qphy->tune2_val) {
-		if (qphy->tune2_efuse_correction > 5 ||
-				qphy->tune2_efuse_correction < -10)
+	 if (temp_correction && qphy->tune2_val) {
+		 if (temp_correction > 5 ||
+			temp_correction < -10)
 			pr_warn("Correction value is out of range : %d\n",
-					qphy->tune2_efuse_correction);
+					 temp_correction);
 		else
 			qphy->tune2_val = qphy->tune2_val +
-						qphy->tune2_efuse_correction;
+						temp_correction;
 	}
 
 	reg_val = readb_relaxed(qphy->base + QUSB2PHY_PORT_TUNE2);
@@ -617,6 +627,12 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + QUSB2PHY_PORT_TUNE5);
 	}
 
+	pr_info("%s():USB_eye_diagram Tune1 = 0x%02x Tune2 = 0x%02x Tune3 = 0x%02x Tune4 = 0x%02x\n",__func__,
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE1),
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE2),
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE3),
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE4));
+
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
 
@@ -628,6 +644,12 @@ static int qusb_phy_init(struct usb_phy *phy)
 		writel_relaxed(readl_relaxed(qphy->base + QUSB2PHY_PWR_CTRL1) &
 				~PWR_CTRL1_POWR_DOWN,
 				qphy->base + QUSB2PHY_PWR_CTRL1);
+
+	pr_info("%s():USB_eye_diagram Tune1 = 0x%02x Tune2 = 0x%02x Tune3 = 0x%02x Tune4 = 0x%02x\n",__func__,
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE1),
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE2),
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE3),
+	readl_relaxed(qphy->base + QUSB2PHY_PORT_TUNE4));
 
 	/* Ensure above write is completed before turning ON ref clk */
 	wmb();
@@ -1630,6 +1652,10 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			of_property_read_u32(dev->of_node,
 						"qcom,tune2-efuse-correction",
 						&qphy->tune2_efuse_correction);
+
+			 of_property_read_u32(dev->of_node,
+						"qcom,tune2-efuse-correction-host",
+						&qphy->tune2_efuse_correction_host);
 
 			if (ret) {
 				dev_err(dev, "DT Value for tune2 efuse is invalid.\n");
