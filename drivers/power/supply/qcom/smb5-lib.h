@@ -95,7 +95,7 @@ enum print_reason {
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
-#define DCP_CURRENT_UA			1500000
+#define DCP_CURRENT_UA			2150000
 #define HVDCP_CURRENT_UA		3000000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
@@ -104,6 +104,7 @@ enum print_reason {
 #define DCIN_ICL_MAX_UA			1500000
 #define DCIN_ICL_STEP_UA		100000
 #define ROLE_REVERSAL_DELAY_MS		500
+#define CHG_INFO_TIME 30000 //30s
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -239,6 +240,19 @@ enum comp_clamp_levels {
 	CLAMP_LEVEL_DEFAULT = 0,
 	CLAMP_LEVEL_1,
 	MAX_CLAMP_LEVEL,
+};
+
+struct smbchg_info {
+	int	cap;
+	int	vbus;
+	int	vbat;
+	int	usb_c;
+	int	bat_c;
+	int	bat_t;
+	int	icl_settled;
+	int	sts;
+	int	chg_type;
+	int typec_mode;
 };
 
 struct clamp_config {
@@ -471,6 +485,7 @@ struct smb_charger {
 	struct delayed_work	pr_swap_detach_work;
 	struct delayed_work	pr_lock_clear_work;
 	struct delayed_work	role_reversal_check;
+	struct delayed_work	charge_info_work;
 
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
@@ -535,6 +550,7 @@ struct smb_charger {
 	bool			hvdcp_disable;
 	int			hw_max_icl_ua;
 	int			auto_recharge_soc;
+	int			auto_recharge_vbat_mv;
 	enum sink_src_mode	sink_src_mode;
 	enum power_supply_typec_power_role power_role;
 	enum jeita_cfg_stat	jeita_configured;
@@ -604,6 +620,7 @@ struct smb_charger {
 
 	int			die_health;
 	int			connector_health;
+	int			charging_enable_flag;
 
 	/* flash */
 	u32			flash_derating_soc;
@@ -841,4 +858,8 @@ int smblib_get_qc3_main_icl_offset(struct smb_charger *chg, int *offset_ua);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+
+int smblib_set_prop_rechg_vbat_thresh(struct smb_charger *chg,
+				const union power_supply_propval *val);
+
 #endif /* __SMB5_CHARGER_H */

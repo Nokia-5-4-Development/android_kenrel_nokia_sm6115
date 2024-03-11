@@ -2407,8 +2407,22 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 	if (chip->charge_done && !chip->charge_full) {
 		if (chip->msoc >= 99 && health == POWER_SUPPLY_HEALTH_GOOD) {
 			chip->charge_full = true;
+			prop.intval = 4330;
+            rc = power_supply_set_property(chip->batt_psy, POWER_SUPPLY_PROP_RECHARGE_VBAT, &prop);
+            if (rc < 0)
+            {
+                pr_err("Failed to set recharge voltage property on batt_psy, rc=%d\n" , rc);
+            }
 			qg_dbg(chip, QG_DEBUG_STATUS, "Setting charge_full (0->1) @ msoc=%d\n",
 					chip->msoc);
+			} else if (chip->msoc >= 99 && health == POWER_SUPPLY_HEALTH_COOL) {
+                chip->charge_full = true;
+                prop.intval = 4280;
+                rc = power_supply_set_property(chip->batt_psy, POWER_SUPPLY_PROP_RECHARGE_VBAT, &prop);
+                if (rc < 0)
+                {
+                    pr_err("Failed to set recharge voltage property on batt_psy, rc=%d\n" , rc);
+                }
 		} else if (health != POWER_SUPPLY_HEALTH_GOOD) {
 			/* terminated in JEITA */
 			qg_dbg(chip, QG_DEBUG_STATUS, "Terminated charging @ msoc=%d\n",
@@ -2994,6 +3008,9 @@ static int get_batt_id_ohm(struct qpnp_qg *chip, u32 *batt_id_ohm)
 	qg_dbg(chip, QG_DEBUG_PROFILE, "batt_id_mv=%d, batt_id_ohm=%d\n",
 					batt_id_mv, *batt_id_ohm);
 
+	pr_info("batt_id_mv=%d, batt_id_ohm=%d\n",
+					batt_id_mv, *batt_id_ohm);
+
 	return 0;
 }
 
@@ -3198,7 +3215,7 @@ static int qg_determine_pon_soc(struct qpnp_qg *chip)
 	char ocv_type[20] = "NONE";
 
 	if (!chip->profile_loaded) {
-		qg_dbg(chip, QG_DEBUG_PON, "No Profile, skipping PON soc\n");
+		pr_info( "No Profile, skipping PON soc\n");
 		return 0;
 	}
 
@@ -3210,7 +3227,7 @@ static int qg_determine_pon_soc(struct qpnp_qg *chip)
 			pr_err("Failed to read %s OCV rc=%d\n",
 					ocv[i].ocv_type, rc);
 		else
-			qg_dbg(chip, QG_DEBUG_PON, "%s OCV=%d\n",
+			pr_info( "%s OCV=%d\n",
 					ocv[i].ocv_type, ocv[i].ocv_uv);
 	}
 
@@ -3239,7 +3256,7 @@ static int qg_determine_pon_soc(struct qpnp_qg *chip)
 		goto done;
 	}
 
-	qg_dbg(chip, QG_DEBUG_PON, "Shutdown: Valid=%d SOC=%d OCV=%duV time=%dsecs temp=%d, time_now=%ldsecs temp_now=%d S7_soc=%d\n",
+	pr_info("Shutdown: Valid=%d SOC=%d OCV=%duV time=%dsecs temp=%d, time_now=%ldsecs temp_now=%d S7_soc=%d\n",
 			shutdown[SDAM_VALID],
 			shutdown[SDAM_SOC],
 			shutdown[SDAM_OCV_UV],
@@ -3275,7 +3292,7 @@ static int qg_determine_pon_soc(struct qpnp_qg *chip)
 	soc = shutdown[SDAM_SOC];
 	soc_raw = shutdown[SDAM_SOC] * 100;
 	strlcpy(ocv_type, "SHUTDOWN_SOC", 20);
-	qg_dbg(chip, QG_DEBUG_PON, "Using SHUTDOWN_SOC @ PON\n");
+	pr_info("Using SHUTDOWN_SOC @ PON\n");
 
 use_pon_ocv:
 	if (use_pon_ocv == true) {
@@ -3347,7 +3364,7 @@ use_pon_ocv:
 			soc = pon_soc;
 		}
 
-		qg_dbg(chip, QG_DEBUG_PON, "v_float=%d v_cutoff=%d FULL_SOC=%d CUTOFF_SOC=%d PON_SYS_SOC=%d pon_soc=%d\n",
+		pr_info("v_float=%d v_cutoff=%d FULL_SOC=%d CUTOFF_SOC=%d PON_SYS_SOC=%d pon_soc=%d\n",
 			chip->bp.float_volt_uv, chip->dt.vbatt_cutoff_mv * 1000,
 			full_soc, cutoff_soc, soc, pon_soc);
 	}

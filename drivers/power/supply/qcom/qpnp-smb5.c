@@ -227,7 +227,7 @@ struct smb5 {
 	struct smb_dt_props	dt;
 };
 
-static int __debug_mask;
+static int __debug_mask = PR_MISC;	 
 
 static ssize_t pd_disabled_show(struct device *dev, struct device_attribute
 				*attr, char *buf)
@@ -1738,6 +1738,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	POWER_SUPPLY_PROP_RECHARGE_VBAT,
 };
 
 #define DEBUG_ACCESSORY_TEMP_DECIDEGC	250
@@ -1890,6 +1891,9 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		val->intval = chg->fcc_stepper_enable;
 		break;
+	case POWER_SUPPLY_PROP_RECHARGE_VBAT:
+		val->intval = chg->auto_recharge_vbat_mv;
+		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;
@@ -1996,6 +2000,9 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		chg->fcc_stepper_enable = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_RECHARGE_VBAT:
+		rc = smblib_set_prop_rechg_vbat_thresh(chg, val);
 		break;
 	default:
 		rc = -EINVAL;
@@ -2527,6 +2534,7 @@ static int smb5_configure_recharging(struct smb5 *chip)
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't configure ADC_RECHARGE_THRESHOLD REG rc=%d\n",
 				rc);
+			chg->auto_recharge_vbat_mv = chip->dt.auto_recharge_vbat_mv;
 			return rc;
 		}
 		/* Program the sample count for VBAT based recharge to 3 */
@@ -2699,6 +2707,8 @@ static int smb5_init_hw(struct smb5 *chip)
 	if (chip->dt.batt_profile_fv_uv < 0)
 		smblib_get_charge_param(chg, &chg->param.fv,
 				&chg->batt_profile_fv_uv);
+	rc = smblib_set_charge_param(chg, &chg->param.aicl_5v_threshold, 4300);
+	pr_info("AICL threshold is 4.3V.\n")
 
 	smblib_get_charge_param(chg, &chg->param.usb_icl,
 				&chg->default_icl_ua);
@@ -2962,6 +2972,11 @@ static int smb5_init_hw(struct smb5 *chip)
 				rc);
 			return rc;
 		}
+	}
+
+	rc = smblib_write(chg, 0x154A, 0x17);
+	 if (rc < 0) {
+		dev_err(chg->dev, "Couldn't set 0x154A rc=%d\n", rc);
 	}
 
 	return rc;
@@ -3550,6 +3565,8 @@ static int smb5_init_typec_class(struct smb5 *chip)
 	return rc;
 }
 
+struct smb_charger *smbchg_dev = NULL;
+
 static int smb5_probe(struct platform_device *pdev)
 {
 	struct smb5 *chip;
@@ -3572,6 +3589,9 @@ static int smb5_probe(struct platform_device *pdev)
 	chg->otg_present = false;
 	chg->main_fcc_max = -EINVAL;
 	mutex_init(&chg->adc_lock);
+
+	smbchg_dev = chg;
+	pr_debug("[%s]line=%d: init smbchg_dev\n", __FUNCTION__, __LINE__);
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {

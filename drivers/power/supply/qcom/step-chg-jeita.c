@@ -892,6 +892,140 @@ static int handle_battery_insertion(struct step_chg_info *chip)
 	return rc;
 }
 
+extern struct smb_charger *smbchg_dev;
+
+#define BAT_TEMPERATURE_NEGATIVE_0	0
+#define BAT_TEMPERATURE_POSITIVE_3	30
+#define BAT_TEMPERATURE_POSITIVE_47	470
+#define BAT_TEMPERATURE_POSITIVE_50	500
+
+#define CUSTOM_JEITA_HARD		1
+
+#define JEITA_HARD_THRESHOLDS_LEN		2
+
+#define CUSTOM_CONFIG_ONCE_STOP_CHARGING		0
+#define CUSTOM_CONFIG_ONCE_RESUME_CHARGING		1
+
+int smblib_update_jeita(struct smb_charger *chg, u32 *thresholds, int type);
+static void set_hard_jeita_dynamically(struct step_chg_info *chip)
+{
+	int rc = 0;
+	static int config_once = CUSTOM_CONFIG_ONCE_STOP_CHARGING;
+	union power_supply_propval bat_temperature = {0, };
+	//union power_supply_propval bat_charging_status = {0, };
+	union power_supply_propval bat_health_status = {0, };
+	u32 jeita_hard_thresholds_2_50_degree[JEITA_HARD_THRESHOLDS_LEN] = {0x32F2, 0xDBF};		// 3    50
+	u32 jeita_hard_thresholds_neg_1_50_degree[JEITA_HARD_THRESHOLDS_LEN] = {0x36B9, 0xDBF};	// 0    50
+	u32 jeita_hard_thresholds_neg_1_47_degree[JEITA_HARD_THRESHOLDS_LEN] = {0x36B9, 0xEF9};	// 0    47
+
+	if (!chip || !smbchg_dev)
+	{
+		pr_err("line=%d: chip is null\n", __LINE__);
+		return;
+	}
+
+	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_TEMP, &bat_temperature);
+	if (rc < 0)
+	{
+		pr_err("Get battery teperature status failed, rc=%d\n", rc);
+	}
+
+	/*
+	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_STATUS, &bat_charging_status);
+	if (rc < 0)
+	{
+		pr_err("Get battery charging status failed, rc=%d\n", rc);
+	}
+	*/
+
+	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_HEALTH, &bat_health_status);
+	if (rc < 0)
+	{
+		pr_err("Get battery health status failed, rc=%d\n", rc);
+	}
+
+	pr_debug("[%s]line=%d: bat_temperature=%d, bat_health_status=%d, config_once=%d\n",
+			__FUNCTION__, __LINE__, bat_temperature.intval, bat_health_status.intval, config_once);
+	/* ZQL1894 add for DRDOOM-166 Modify frequent recharge at low temperature by shixuanxuan at 2020/9/25 start */
+	//if ((bat_temperature.intval <= BAT_TEMPERATURE_NEGATIVE_0) /* && (bat_charging_status.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) */
+	//		&& (bat_health_status.intval == POWER_SUPPLY_HEALTH_COLD))
+	if (bat_health_status.intval == POWER_SUPPLY_HEALTH_COLD)
+	/* ZQL1894 add for DRDOOM-166 Modify frequent recharge at low temperature by shixuanxuan at 2020/9/25 end */
+	{
+		/* stop charging when battery temperature below 0 degree */
+		if (config_once == CUSTOM_CONFIG_ONCE_STOP_CHARGING)
+		{
+			pr_debug("[%s]line=%d: set hard jeita[3, 50]\n", __FUNCTION__, __LINE__);
+			rc = smblib_update_jeita(smbchg_dev, jeita_hard_thresholds_2_50_degree, CUSTOM_JEITA_HARD);			// 3   50
+			if (rc < 0)
+			{
+				pr_err("line=%d: Couldn't configure Jeita cold threshold rc=%d\n", __LINE__, rc);
+			}
+
+			config_once = CUSTOM_CONFIG_ONCE_RESUME_CHARGING;
+		}
+
+	}
+	/* ZQL1894 add for DRDOOM-166 Modify frequent recharge at low temperature by shixuanxuan at 2020/9/25 start */
+	//else if ((bat_temperature.intval >= BAT_TEMPERATURE_POSITIVE_3) /* && (bat_charging_status.intval == POWER_SUPPLY_STATUS_CHARGING) */
+	//		&& (bat_health_status.intval == POWER_SUPPLY_HEALTH_COOL))
+	else if (bat_health_status.intval == POWER_SUPPLY_HEALTH_COOL)
+	/* ZQL1894 add for DRDOOM-166 Modify frequent recharge at low temperature by shixuanxuan at 2020/9/25 end */
+	{
+		/* resume charging when battery temperature above 3 degree */
+		if (config_once == CUSTOM_CONFIG_ONCE_RESUME_CHARGING)
+		{
+			pr_debug("[%s]line=%d: set hard jeita[0, 50]\n", __FUNCTION__, __LINE__);
+			rc = smblib_update_jeita(smbchg_dev, jeita_hard_thresholds_neg_1_50_degree, CUSTOM_JEITA_HARD);		// 0    50
+			if (rc < 0)
+			{
+				pr_err("line=%d: Couldn't configure Jeita cold threshold rc=%d\n", __LINE__, rc);
+			}
+
+			config_once = CUSTOM_CONFIG_ONCE_STOP_CHARGING;
+		}
+
+	}
+	else if ((bat_temperature.intval >= BAT_TEMPERATURE_POSITIVE_50) /* && (bat_charging_status.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) */
+			&& ((bat_health_status.intval == POWER_SUPPLY_HEALTH_OVERHEAT) || (bat_health_status.intval == POWER_SUPPLY_HEALTH_HOT)))
+	{
+		/* stop charging when battery temperature above 50 degree */
+		if (config_once == CUSTOM_CONFIG_ONCE_STOP_CHARGING)
+		{
+			pr_debug("[%s]line=%d: set hard jeita[0, 47]\n", __FUNCTION__, __LINE__);
+			rc = smblib_update_jeita(smbchg_dev, jeita_hard_thresholds_neg_1_47_degree, CUSTOM_JEITA_HARD);		// 0    47
+			if (rc < 0)
+			{
+				pr_err("line=%d: Couldn't configure Jeita cold threshold rc=%d\n", __LINE__, rc);
+			}
+
+			config_once = CUSTOM_CONFIG_ONCE_RESUME_CHARGING;
+		}
+
+	}
+	else if ((bat_temperature.intval <= BAT_TEMPERATURE_POSITIVE_47) /* && (bat_charging_status.intval == POWER_SUPPLY_STATUS_CHARGING) */
+			&& (bat_health_status.intval == POWER_SUPPLY_HEALTH_WARM))
+	{
+		/* resume charging when battery temperature below 47 degree */
+		if (config_once == CUSTOM_CONFIG_ONCE_RESUME_CHARGING)
+		{
+			pr_debug("[%s]line=%d: set hard jeita[0, 50]\n", __FUNCTION__, __LINE__);
+			rc = smblib_update_jeita(smbchg_dev, jeita_hard_thresholds_neg_1_50_degree, CUSTOM_JEITA_HARD);		// 0    50
+			if (rc < 0)
+			{
+				pr_err("line=%d: Couldn't configure Jeita cold threshold rc=%d\n", __LINE__, rc);
+			}
+
+			config_once = CUSTOM_CONFIG_ONCE_STOP_CHARGING;
+		}
+
+	}
+	else
+	{
+		pr_debug("[%s]line=%d: set nothing\n", __FUNCTION__, __LINE__);
+	}
+}
+
 static void status_change_work(struct work_struct *work)
 {
 	struct step_chg_info *chip = container_of(work,
@@ -903,6 +1037,8 @@ static void status_change_work(struct work_struct *work)
 		goto exit_work;
 
 	handle_battery_insertion(chip);
+
+	set_hard_jeita_dynamically(chip);
 
 	/* skip elapsed_us debounce for handling battery temperature */
 	rc = handle_jeita(chip);

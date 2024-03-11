@@ -35,6 +35,61 @@
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
 
+static void smblib_update_chg_info(struct smb_charger *chg)
+{
+	union power_supply_propval info_val = {0,};
+	struct smbchg_info chg_info = {0,};
+
+	if (chg->batt_psy)
+	{
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_CAPACITY, &info_val);
+			chg_info.cap = info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &info_val);
+			chg_info.vbat = info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_CURRENT_NOW, &info_val);
+			chg_info.bat_c= info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_TEMP, &info_val);
+			chg_info.bat_t= info_val.intval;
+
+			power_supply_get_property(chg->batt_psy, POWER_SUPPLY_PROP_STATUS, &info_val);
+			chg_info.sts= info_val.intval;
+	}
+
+	if (chg->usb_psy)
+	{
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &info_val);
+			chg_info.vbus= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &info_val);
+			chg_info.usb_c= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &info_val);
+			chg_info.icl_settled= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_REAL_TYPE, &info_val);
+			chg_info.chg_type= info_val.intval;
+
+			power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_TYPEC_MODE, &info_val);
+			chg_info.typec_mode= info_val.intval;
+	}
+
+	pr_info("charge_info:cap=%d, vbat=%d, FCC=%d, bat_temp=%d, status=%d, Vbus=%d, usb_cur=%d, ICL=%d, chg_type=%d, typec_mode=%d\n",
+		chg_info.cap, chg_info.vbat, chg_info.bat_c, chg_info.bat_t, chg_info.sts, chg_info.vbus, chg_info.usb_c, chg_info.icl_settled, chg_info.chg_type,chg_info.typec_mode);
+}
+
+static void smblib_update_chg_info_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work,
+			struct smb_charger, charge_info_work.work);
+
+	smblib_update_chg_info(chg);
+
+	schedule_delayed_work(&chg->charge_info_work, msecs_to_jiffies(CHG_INFO_TIME));
+}
+
 #define typec_rp_med_high(chg, typec_mode)			\
 	((typec_mode == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM	\
 	|| typec_mode == POWER_SUPPLY_TYPEC_SOURCE_HIGH)	\
@@ -2369,6 +2424,7 @@ int smblib_set_prop_input_suspend(struct smb_charger *chg,
 		return rc;
 	}
 
+	pr_info("Input_suspend is %d.\n",val->intval);
 	power_supply_changed(chg->batt_psy);
 	return rc;
 }
@@ -3711,7 +3767,7 @@ static int smblib_get_prop_ufp_mode(struct smb_charger *chg)
 	case SNK_DAM_500MA_BIT:
 	case SNK_DAM_1500MA_BIT:
 	case SNK_DAM_3000MA_BIT:
-		return POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY;
+		return POWER_SUPPLY_TYPEC_SOURCE_DEFAULT;
 	default:
 		break;
 	}
@@ -5630,6 +5686,9 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
+
+	pr_info("IRQ: usbin-plugin %s,  vbus_rising = %d\n",
+					vbus_rising ? "attached" : "detached", vbus_rising);
 }
 
 irqreturn_t usb_plugin_irq_handler(int irq, void *data)
@@ -8138,6 +8197,10 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->role_reversal_check,
 					smblib_typec_role_check_work);
 
+	INIT_DELAYED_WORK(&chg->charge_info_work,smblib_update_chg_info_work);
+
+	schedule_delayed_work(&chg->charge_info_work, msecs_to_jiffies(CHG_INFO_TIME));
+
 	if (chg->wa_flags & CHG_TERMINATION_WA) {
 		INIT_WORK(&chg->chg_termination_work,
 					smblib_chg_termination_work);
@@ -8292,6 +8355,7 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->usbov_dbc_work);
 		cancel_delayed_work_sync(&chg->role_reversal_check);
 		cancel_delayed_work_sync(&chg->pr_swap_detach_work);
+		cancel_delayed_work_sync(&chg->charge_info_work);
 		power_supply_unreg_notifier(&chg->nb);
 		smblib_destroy_votables(chg);
 		qcom_step_chg_deinit();

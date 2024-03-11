@@ -438,6 +438,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(batt_profile_version),
 	POWER_SUPPLY_ATTR(batt_full_current),
 	POWER_SUPPLY_ATTR(recharge_soc),
+	POWER_SUPPLY_ATTR(recharge_vbat),
 	POWER_SUPPLY_ATTR(hvdcp_opti_allowed),
 	POWER_SUPPLY_ATTR(smb_en_mode),
 	POWER_SUPPLY_ATTR(smb_en_reason),
